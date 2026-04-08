@@ -1,0 +1,15 @@
+https://database.fathomnet.org/fathomnet/#
+
+SCROLL DOWN UNTIL YOU SEE
+
+---------------------------
+
+Download Segmentation Masks
+
+Download COCO JSON files containing the segmentation mask annotations:
+
+Download train.json (281 MB)
+Download test.json (22.2 MB)
+Segmentation masks generated in collaboration with Meta.
+
+Learn more
