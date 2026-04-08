@@ -1,4 +1,5 @@
 import os
+import argparse
 from pathlib import Path
 
 import torch
@@ -86,16 +87,37 @@ def validate(model, loader, criterion, device, num_classes):
     return running_loss / n, running_acc / n, running_miou / n
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train U-Net on SUIM dataset.")
+    parser.add_argument("--data-root", default="", help="Path to SUIM root directory.")
+    parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--img-size", type=int, default=256)
+    parser.add_argument("--num-workers", type=int, default=-1, help="-1 uses OS-based default.")
+    parser.add_argument("--val-ratio", type=float, default=0.2)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     project_dir = Path(__file__).resolve().parent
-    data_root = Path(os.environ.get("SUIM_ROOT", project_dir / "SUIM"))
-    batch_size = 8
-    lr = 1e-4
-    epochs = 30
+    if args.data_root:
+        data_root = Path(args.data_root)
+    else:
+        data_root = Path(os.environ.get("SUIM_ROOT", project_dir / "SUIM"))
+    batch_size = args.batch_size
+    lr = args.lr
+    epochs = args.epochs
     num_classes = len(SUIM_CLASSES)
-    img_size = 256
-    num_workers = 0 if os.name == "nt" else 4
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    img_size = args.img_size
+    num_workers = (0 if os.name == "nt" else 4) if args.num_workers < 0 else args.num_workers
+    if args.device == "auto":
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device(args.device)
 
     if not data_root.exists():
         raise FileNotFoundError(
@@ -110,8 +132,8 @@ def main():
     train_loader, val_loader, _ = create_suim_dataloaders(
         root=data_root,
         batch_size=batch_size,
-        val_ratio=0.2,
-        seed=42,
+        val_ratio=args.val_ratio,
+        seed=args.seed,
         num_workers=num_workers,
         pin_memory=torch.cuda.is_available(),
         train_transform=get_train_transform(img_size),

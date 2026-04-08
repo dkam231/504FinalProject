@@ -208,12 +208,18 @@ def rgb_mask_to_class(
         label_mask[matches] = class_idx
 
     if np.any(label_mask == 255):
-        unknown = np.unique(mask[label_mask == 255].reshape(-1, 3), axis=0)
-        raise ValueError(
-            "Found unknown RGB values in segmentation mask. "
-            f"Examples: {unknown[:10].tolist()}. "
-            "If your dataset uses a different palette, override color_map."
-        )
+        # Some SUIM mirrors store masks with compression/anti-aliasing artifacts,
+        # which shifts RGB values slightly away from the canonical palette.
+        # For unmatched pixels, map each RGB triplet to the nearest SUIM class color.
+        unknown_mask = (label_mask == 255)
+        palette_colors = np.array(list(color_map.keys()), dtype=np.int16)   # [K, 3]
+        palette_labels = np.array(list(color_map.values()), dtype=np.uint8)  # [K]
+
+        unknown_pixels = mask[unknown_mask].astype(np.int16)  # [N, 3]
+        diff = unknown_pixels[:, None, :] - palette_colors[None, :, :]  # [N, K, 3]
+        dist2 = np.sum(diff * diff, axis=2)  # [N, K]
+        nearest_idx = np.argmin(dist2, axis=1)  # [N]
+        label_mask[unknown_mask] = palette_labels[nearest_idx]
 
     return label_mask
 
