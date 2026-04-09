@@ -44,6 +44,13 @@ SUIM_INDEX_TO_COLOR: Dict[int, Tuple[int, int, int]] = {
     v: k for k, v in SUIM_COLOR_MAP.items()
 }
 
+SUIM_BINARY_CLASSES: List[str] = [
+    "background",
+    "foreground",
+]
+
+SUIM_BACKGROUND_CLASS_IDS = {0, 7}
+
 
 @dataclass
 class SUIMSample:
@@ -208,12 +215,12 @@ def rgb_mask_to_class(
         label_mask[matches] = class_idx
 
     if np.any(label_mask == 255):
-        unknown = np.unique(mask[label_mask == 255].reshape(-1, 3), axis=0)
-        raise ValueError(
-            "Found unknown RGB values in segmentation mask. "
-            f"Examples: {unknown[:10].tolist()}. "
-            "If your dataset uses a different palette, override color_map."
-        )
+        palette = np.array(list(color_map.keys()), dtype=np.int16)
+        unknown_pixels = mask[label_mask == 255].astype(np.int16)
+        distances = np.sum((unknown_pixels[:, None, :] - palette[None, :, :]) ** 2, axis=2)
+        nearest_palette_indices = np.argmin(distances, axis=1)
+        nearest_class_indices = np.array(list(color_map.values()), dtype=np.uint8)[nearest_palette_indices]
+        label_mask[label_mask == 255] = nearest_class_indices
 
     return label_mask
 
@@ -226,6 +233,45 @@ def class_to_rgb_mask(class_mask: np.ndarray) -> np.ndarray:
     for idx, color in SUIM_INDEX_TO_COLOR.items():
         rgb[class_mask == idx] = color
     return rgb
+
+
+def class_mask_to_binary(class_mask: np.ndarray) -> np.ndarray:
+    if class_mask.ndim != 2:
+        raise ValueError(f"Expected HxW class mask, got shape: {class_mask.shape}")
+
+    binary_mask = np.ones_like(class_mask, dtype=np.uint8)
+    for background_idx in SUIM_BACKGROUND_CLASS_IDS:
+        binary_mask[class_mask == background_idx] = 0
+    return binary_mask
+
+
+def binary_mask_to_rgb(binary_mask: np.ndarray) -> np.ndarray:
+    if binary_mask.ndim != 2:
+        raise ValueError(f"Expected HxW binary mask, got shape: {binary_mask.shape}")
+
+    rgb = np.zeros((*binary_mask.shape, 3), dtype=np.uint8)
+    rgb[binary_mask == 0] = (0, 0, 0)
+    rgb[binary_mask == 1] = (255, 255, 255)
+    return rgb
+
+
+def crop_mask_from_bottom(image: Image.Image, rgb_mask: Image.Image) -> Image.Image:
+    if image.size == rgb_mask.size:
+        return rgb_mask
+
+    image_w, image_h = image.size
+    mask_w, mask_h = rgb_mask.size
+
+    if mask_w != image_w:
+        raise ValueError(
+            f"Width mismatch is not supported by the dataset crop rule: image={image.size}, mask={rgb_mask.size}"
+        )
+    if mask_h < image_h:
+        raise ValueError(
+            f"Mask is shorter than image, so bottom-cropping cannot align it: image={image.size}, mask={rgb_mask.size}"
+        )
+
+    return rgb_mask.crop((0, 0, image_w, image_h))
 
 
 # ============================================================
@@ -388,18 +434,20 @@ class SUIMDataset(Dataset):
 
         image = Image.open(sample.image_path).convert("RGB")
         rgb_mask = Image.open(sample.mask_path).convert("RGB")
+        rgb_mask = crop_mask_from_bottom(image, rgb_mask)
 
         image_np = np.array(image, dtype=np.uint8)
         rgb_mask_np = np.array(rgb_mask, dtype=np.uint8)
         class_mask = rgb_mask_to_class(rgb_mask_np, self.color_map)
+        binary_mask = class_mask_to_binary(class_mask)
 
         if self.joint_transform is not None:
-            transformed = self.joint_transform(image=image_np, mask=class_mask)
+            transformed = self.joint_transform(image=image_np, mask=binary_mask)
             image_out = transformed["image"] if isinstance(transformed, dict) else transformed[0]
             mask_out = transformed["mask"] if isinstance(transformed, dict) else transformed[1]
         else:
             image_out = image_np
-            mask_out = class_mask
+            mask_out = binary_mask
 
             if self.image_transform is not None:
                 image_out = self.image_transform(image_out)
@@ -499,7 +547,7 @@ def create_suim_dataloaders(
 
 
 if __name__ == "__main__":
-    root = os.environ.get("SUIM_ROOT", "./SUIM")
+    root = os.environ.get("SUIM_ROOT", "./data")
     print(f"Trying to read SUIM dataset from: {root}")
 
     if Path(root).exists():
