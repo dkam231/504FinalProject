@@ -221,7 +221,9 @@ kaggle
 sample_100/
 sample_masks/
 images_seg/
+masks_seg/
 fathomnet_segmentations/
 **/*.json
+
 **/*.png
 **/*.pt

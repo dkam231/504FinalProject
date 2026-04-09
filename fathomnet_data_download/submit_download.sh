@@ -11,11 +11,13 @@
 #SBATCH --error=download_error_%j.txt  # Save any errors to this separate file
 
 # 1. Go to your project directory
-cd /home/jjaemin/504FinalProject/fathomnet_data_download # you might need to change this for your own local env
+cd /home/dkamboj/504FinalProject/fathomnet_data_download # you might need to change this for your own local env
 
 # 2. (Optional but recommended) Load your Anaconda environment if you aren't using the default system Python
 # module load python3.11-anaconda/2024.02-1
+module load mamba/py3.12
 # conda activate base
+conda activate 504env
 
 echo "Starting FathomNet download job..."
 date
