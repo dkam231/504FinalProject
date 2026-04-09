@@ -7,7 +7,7 @@ from dataloader import SUIM_CLASSES, create_suim_dataloaders
 
 def main():
     project_dir = Path(__file__).resolve().parent
-    data_root = project_dir / "SUIM"
+    data_root = project_dir / "data"
 
     if not data_root.exists():
         raise FileNotFoundError(
