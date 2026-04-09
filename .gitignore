@@ -224,3 +224,4 @@ images_seg/
 fathomnet_segmentations/
 **/*.json
 **/*.png
+**/*.pt
