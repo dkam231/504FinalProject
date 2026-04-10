@@ -148,6 +148,7 @@ if __name__ == "__main__":
 
     print(f"Project root: {project_root}")
 
+<<<<<<< HEAD
     print("\n" + "=" * 40)
     print("STARTING TEST DATASET")
     print("=" * 40)
@@ -156,13 +157,30 @@ if __name__ == "__main__":
         img_dir=os.path.join(project_root, "images_seg", "test"),
         mask_dir=os.path.join(project_root, "masks_seg", "test"),
     )
+=======
+    # # 3. Process TEST Data using absolute paths
+    # print("\n" + "="*40)
+    # print("STARTING TEST DATASET")
+    # print("="*40)
+    # process_all_data(
+    #     json_path=os.path.join(project_root, 'fathomnet_data_download', 'test.json'), 
+    #     img_dir=os.path.join(project_root, 'images_seg', 'test'), 
+    #     mask_dir=os.path.join(project_root, 'masks_seg', 'test')
+    # )
+>>>>>>> 666f59335bc316546a2fcaa31064616111a2bb8c
 
 
     print("\n" + "=" * 40)
     print("STARTING TRAIN DATASET")
     print("=" * 40)
     process_all_data(
+<<<<<<< HEAD
         json_path=os.path.join(project_root, "fathomnet_segmentations", "train.json"),
         img_dir=os.path.join(project_root, "images_seg", "train"),
         mask_dir=os.path.join(project_root, "masks_seg", "train"),
+=======
+        json_path=os.path.join(project_root, 'fathomnet_data_download', 'train.json'), 
+        img_dir=os.path.join(project_root, 'images_seg', 'train'), 
+        mask_dir=os.path.join(project_root, 'masks_seg', 'train')
+>>>>>>> 666f59335bc316546a2fcaa31064616111a2bb8c
     )
