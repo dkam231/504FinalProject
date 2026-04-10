@@ -29,6 +29,7 @@ pairs_test/
 pairs_train/
 images_masks/
 images_seg/
+masks_seg/
 sample_100/
 sample_masks/
 SUIM_Dataset/
@@ -224,3 +225,9 @@ images_seg/
 fathomnet_segmentations/
 **/*.json
 **/*.png
+
+nohup*
+sbatch_code/
+sbatch_log/
+output*/
+results*/

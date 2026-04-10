@@ -8,103 +8,161 @@ from pycocotools import mask as mask_util
 from tqdm import tqdm
 
 def process_all_data(json_path, img_dir, mask_dir):
-    # 1. Setup Directories
-    for d in [img_dir, mask_dir]:
-        if not os.path.exists(d): 
-            os.makedirs(d)
+    os.makedirs(img_dir, exist_ok=True)
+    os.makedirs(mask_dir, exist_ok=True)
 
-    # 2. Load JSON Data
-    print(f"📂 Loading JSON data from {json_path}...")
-    with open(json_path, 'r') as f:
+    print(f"\n📂 Loading JSON data from: {json_path}")
+    print(f"📁 Image output dir: {img_dir}")
+    print(f"📁 Mask output dir : {mask_dir}")
+    print(f"✅ JSON exists? {os.path.exists(json_path)}")
+
+    if not os.path.exists(json_path):
+        raise FileNotFoundError(f"JSON file not found: {json_path}")
+
+    with open(json_path, "r") as f:
         data = json.load(f)
-    
-    # Create a map of image_id -> list of annotations
-    # (Since one image can have multiple fish/masks)
+
+    annotations = data.get("annotations", [])
+    all_images = data.get("images", [])
+
+    print(f"📝 Number of annotations: {len(annotations)}")
+    print(f"🖼️  Number of images in JSON: {len(all_images)}")
+
     ann_map = {}
-    for ann in data.get('annotations', []):
-        img_id = ann['image_id']
+    for ann in annotations:
+        img_id = ann["image_id"]
         if img_id not in ann_map:
             ann_map[img_id] = []
         ann_map[img_id].append(ann)
 
-    # 3. Process ALL images
-    all_images = data.get('images', [])
+    download_success = 0
+    download_failed = 0
+    already_have_image = 0
+    mask_written = 0
+    mask_already_exists = 0
+    image_read_failed = 0
+    no_annotations_for_image = 0
+
     print(f"🌊 Starting download and mask generation for ALL {len(all_images)} images...")
 
     for img_entry in tqdm(all_images):
-        img_uuid = img_entry['id']
-        file_name = img_entry['file_name']
+        img_id = img_entry["id"]
+        file_name = img_entry["file_name"]
+
+        if isinstance(img_id, str) and "-" in img_id:
+            img_uuid = img_id
+        else:
+            img_uuid = os.path.splitext(file_name)[0]
+
         img_path = os.path.join(img_dir, file_name)
-        mask_output_path = os.path.join(mask_dir, file_name) # Save mask with same name
-        
-        # --- DOWNLOAD IMAGE ---
+        mask_output_path = os.path.join(mask_dir, file_name)
+
         if not os.path.exists(img_path):
             try:
-                # Ask API for URL
                 dto = fn_images.find_by_uuid(img_uuid)
-                r = requests.get(dto.url, timeout=15)
-                if r.status_code == 200:
-                    with open(img_path, 'wb') as f:
-                        f.write(r.content)
-            except Exception as e:
-                # Skip if download fails (e.g., dead link)
-                continue 
+                if dto is None or not hasattr(dto, "url") or dto.url is None:
+                    print(f"[DOWNLOAD FAIL] No URL returned for file={file_name} uuid={img_uuid}")
+                    continue
 
-        # --- GENERATE PURE TRAINING MASK ---
-        # Only generate the mask if it doesn't already exist
-        if not os.path.exists(mask_output_path):
-            image = cv2.imread(img_path)
-            if image is None: 
-                continue # Skip if image file is corrupted
-            
-            # Create an empty black mask the same size as the image
-            combined_mask = np.zeros(image.shape[:2], dtype=np.uint8)
-            
-            # Find all annotations for this specific image
-            if img_uuid in ann_map:
-                for ann in ann_map[img_uuid]:
-                    rle = ann['segmentation']
-                    # Decode the RLE string into pixels (returns 0s and 1s)
+                r = requests.get(dto.url, timeout=30)
+                if r.status_code == 200:
+                    with open(img_path, "wb") as f:
+                        f.write(r.content)
+                else:
+                    print(f"[DOWNLOAD FAIL] status={r.status_code} file={file_name} url={dto.url}")
+                    continue
+
+            except Exception as e:
+                print(f"[DOWNLOAD EXCEPTION] file={file_name} uuid={img_uuid} error={repr(e)}")
+                continue
+        else:
+            already_have_image += 1
+
+        if not os.path.exists(img_path):
+            print(f"[MISSING IMAGE AFTER DOWNLOAD] {img_path}")
+            download_failed += 1
+            continue
+
+        if os.path.exists(mask_output_path):
+            mask_already_exists += 1
+            continue
+
+        image = cv2.imread(img_path)
+        if image is None:
+            print(f"[IMAGE READ FAIL] Could not read image: {img_path}")
+            image_read_failed += 1
+            continue
+
+        combined_mask = np.zeros(image.shape[:2], dtype=np.uint8)
+
+        if img_uuid in ann_map:
+            for ann in ann_map[img_uuid]:
+                try:
+                    rle = ann["segmentation"]
                     binary_mask = mask_util.decode(rle)
-                    # Combine with other masks in the same image
+
+                    if len(binary_mask.shape) == 3:
+                        binary_mask = binary_mask[:, :, 0]
+
+                    binary_mask = (binary_mask > 0).astype(np.uint8)
+
                     combined_mask = np.maximum(combined_mask, binary_mask)
 
-            # Multiply by 255 so the mask is standard Grayscale (0 = Black/Water, 255 = White/Fish)
-            # This is the exact format PyTorch/U-Net expects for Ground Truth labels
-            final_mask = combined_mask * 255
-            
-            # Save the pure mask
-            cv2.imwrite(mask_output_path, final_mask)
+                except Exception as e:
+                    print(f"[MASK DECODE FAIL] file={file_name} uuid={img_uuid} error={repr(e)}")
+        else:
+            no_annotations_for_image += 1
 
-    print(f"\nDone! \nImages are in: {img_dir}\nTraining Masks are in: {mask_dir}")
+        final_mask = combined_mask * 255
+
+        ok = cv2.imwrite(mask_output_path, final_mask)
+        if ok:
+            mask_written += 1
+        else:
+            print(f"[MASK WRITE FAIL] {mask_output_path}")
+
+    print("\n" + "=" * 60)
+    print("DONE")
+    print("=" * 60)
+    print(f"Images dir              : {img_dir}")
+    print(f"Masks dir               : {mask_dir}")
+    print(f"Downloaded successfully : {download_success}")
+    print(f"Download failed         : {download_failed}")
+    print(f"Already had image       : {already_have_image}")
+    print(f"Masks written           : {mask_written}")
+    print(f"Masks already existed   : {mask_already_exists}")
+    print(f"Image read failed       : {image_read_failed}")
+    print(f"No annotations for img  : {no_annotations_for_image}")
+
+    num_img_files = len([f for f in os.listdir(img_dir) if os.path.isfile(os.path.join(img_dir, f))])
+    num_mask_files = len([f for f in os.listdir(mask_dir) if os.path.isfile(os.path.join(mask_dir, f))])
+
+    print(f"Actual files in img_dir : {num_img_files}")
+    print(f"Actual files in mask_dir: {num_mask_files}")
+    print("=" * 60)
+
 
 if __name__ == "__main__":
-    # 1. Get the exact directory where THIS script is saved
-    # (/home/jjaemin/504FinalProject/fathomnet_data_download)
     script_dir = os.path.dirname(os.path.abspath(__file__))
-
-    # 2. Go UP one level to the main project folder
-    # (/home/jjaemin/504FinalProject)
     project_root = os.path.dirname(script_dir)
 
-    print(project_root)
+    print(f"Project root: {project_root}")
 
-    # 3. Process TEST Data using absolute paths
-    print("\n" + "="*40)
+    print("\n" + "=" * 40)
     print("STARTING TEST DATASET")
-    print("="*40)
+    print("=" * 40)
     process_all_data(
-        json_path=os.path.join(project_root, 'fathomnet_segmentations', 'test.json'), 
-        img_dir=os.path.join(project_root, 'images_seg', 'test'), 
-        mask_dir=os.path.join(project_root, 'masks_seg', 'test')
+        json_path=os.path.join(project_root, "fathomnet_segmentations", "test.json"),
+        img_dir=os.path.join(project_root, "images_seg", "test"),
+        mask_dir=os.path.join(project_root, "masks_seg", "test"),
     )
 
-    # 4. Process TRAIN Data using absolute paths
-    print("\n" + "="*40)
+
+    print("\n" + "=" * 40)
     print("STARTING TRAIN DATASET")
-    print("="*40)
+    print("=" * 40)
     process_all_data(
-        json_path=os.path.join(project_root, 'fathomnet_segmentations', 'train.json'), 
-        img_dir=os.path.join(project_root, 'images_seg', 'train'), 
-        mask_dir=os.path.join(project_root, 'masks_seg', 'train')
+        json_path=os.path.join(project_root, "fathomnet_segmentations", "train.json"),
+        img_dir=os.path.join(project_root, "images_seg", "train"),
+        mask_dir=os.path.join(project_root, "masks_seg", "train"),
     )
