@@ -183,7 +183,7 @@ def train_fathomnet(num_train=None):
         train_img_dir,
         mask_dir=train_mask_dir,
         limit=num_train,
-        require_nonempty_mask=False,   # 只检查mask文件存在
+        require_nonempty_mask=False,
     )
 
     test_dicts, _ = get_fathom_coco_dicts(
