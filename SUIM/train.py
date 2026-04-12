@@ -158,6 +158,35 @@ def plot_training_curves(history, output_path):
     plt.close(fig)
 
 
+def save_checkpoint(checkpoint_path, model, optimizer, epoch, best_iou, history):
+    torch.save(
+        {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "best_iou": best_iou,
+            "history": history,
+        },
+        checkpoint_path,
+    )
+
+
+def load_checkpoint(checkpoint_path, model, optimizer, device):
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+
+    if "model_state_dict" in checkpoint:
+        model.load_state_dict(checkpoint["model_state_dict"])
+        if optimizer is not None and "optimizer_state_dict" in checkpoint:
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        start_epoch = checkpoint.get("epoch", 0) + 1
+        best_iou = checkpoint.get("best_iou", 0.0)
+        history = checkpoint.get("history", [])
+        return start_epoch, best_iou, history
+
+    model.load_state_dict(checkpoint)
+    return 0, 0.0, []
+
+
 def main():
     project_dir = Path(__file__).resolve().parent
     data_root = Path(os.environ.get("SUIM_ROOT", project_dir / "data"))
@@ -169,6 +198,7 @@ def main():
     img_size = (img_width, img_height)
     val_ratio = float(os.environ.get("SUIM_VAL_RATIO", 0.2))
     seed = int(os.environ.get("SUIM_SEED", 42))
+    resume_training = os.environ.get("SUIM_RESUME", "1") == "1"
     num_workers = 0 if os.name == "nt" else int(os.environ.get("SUIM_NUM_WORKERS", 1))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -214,13 +244,22 @@ def main():
 
     history = []
     best_iou = 0.0
+    start_epoch = 0
     best_model_path = checkpoints_dir / "best_unet_suim_binary.pth"
     last_model_path = checkpoints_dir / "last_unet_suim_binary.pth"
     history_csv_path = checkpoints_dir / "training_history_binary.csv"
     curves_png_path = checkpoints_dir / "training_curves_binary.png"
 
+    if resume_training and last_model_path.exists():
+        start_epoch, best_iou, history = load_checkpoint(
+            last_model_path, model, optimizer, device
+        )
+        print(f"Resuming training from epoch {start_epoch + 1}")
+        print(f"Loaded checkpoint: {last_model_path}")
+        print(f"Best validation IoU so far: {best_iou:.4f}")
+
     print("\nStarting training...")
-    for epoch in range(epochs):
+    for epoch in range(start_epoch, epochs):
         train_loss, train_acc, train_iou = train_one_epoch(
             model, train_loader, optimizer, criterion, device, epoch, epochs
         )
@@ -243,10 +282,10 @@ def main():
         print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f} | Train IoU: {train_iou:.4f}")
         print(f"Val   Loss: {val_loss:.4f} | Val   Acc: {val_acc:.4f} | Val   IoU: {val_iou:.4f}")
 
-        torch.save(model.state_dict(), last_model_path)
+        save_checkpoint(last_model_path, model, optimizer, epoch, best_iou, history)
         if val_iou > best_iou:
             best_iou = val_iou
-            torch.save(model.state_dict(), best_model_path)
+            save_checkpoint(best_model_path, model, optimizer, epoch, best_iou, history)
             print(f"Saved best model to: {best_model_path}")
 
         save_history_csv(history, history_csv_path)

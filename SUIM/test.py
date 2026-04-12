@@ -137,7 +137,11 @@ def main():
     )
 
     model = UNet(n_channels=3, n_classes=1).to(device)
-    model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    if "model_state_dict" in checkpoint:
+        model.load_state_dict(checkpoint["model_state_dict"])
+    else:
+        model.load_state_dict(checkpoint)
     criterion = BCEDiceFocalLoss()
 
     print(f"Dataset root: {data_root}")
