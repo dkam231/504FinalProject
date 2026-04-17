@@ -147,7 +147,7 @@ def run_inference(model, loader, device, output_dir):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Test DeepLabV3 on SUIM_Dataset.")
-    parser.add_argument("--weights", required=True, help="Path to trained model weights.")
+    parser.add_argument("--weights", default="checkpoints/best_deeplab_suim_binary.pth", help="Path to trained model weights.")
     parser.add_argument("--img-size", type=int, default=256)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--num-workers", type=int, default=-1)
