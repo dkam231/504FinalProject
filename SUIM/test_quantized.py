@@ -8,7 +8,7 @@ from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
 
 from dataloader import SUIM_BINARY_CLASSES, binary_mask_to_rgb, create_suim_dataloaders
-from model import UNet
+from model_quantized import DEFAULT_QUANTIZED_MODEL_NAME, load_quantized_model
 from utils import BCEDiceFocalLoss, binary_iou, pixel_accuracy
 
 
@@ -29,14 +29,14 @@ def logits_to_binary_predictions(logits):
     return (probs >= 0.5).long()
 
 
-def save_visualizations(model, loader, device, output_dir, max_images=6):
+def save_visualizations(model, loader, output_dir, max_images=6):
     model.eval()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     saved = 0
     with torch.no_grad():
         for batch in loader:
-            images = batch["image"].to(device)
+            images = batch["image"].cpu()
             masks = batch["mask"]
 
             logits = model(images)
@@ -59,29 +59,29 @@ def save_visualizations(model, loader, device, output_dir, max_images=6):
                 axes[1].imshow(gt_rgb)
                 axes[1].set_title("Ground Truth")
                 axes[2].imshow(pred_rgb)
-                axes[2].set_title("Prediction")
+                axes[2].set_title("Quantized Prediction")
 
                 for axis in axes:
                     axis.axis("off")
 
                 fig.tight_layout()
-                save_path = output_dir / f"test_vis_{saved:03d}.png"
+                save_path = output_dir / f"quantized_test_vis_{saved:03d}.png"
                 fig.savefig(save_path, bbox_inches="tight")
                 plt.close(fig)
                 saved += 1
 
 
 @torch.no_grad()
-def evaluate(model, loader, criterion, device):
+def evaluate(model, loader, criterion):
     model.eval()
     running_loss = 0.0
     running_acc = 0.0
     running_iou = 0.0
 
-    progress_bar = tqdm(loader, desc="Testing", leave=False)
+    progress_bar = tqdm(loader, desc="Testing Quantized Model", leave=False)
     for step, batch in enumerate(progress_bar, start=1):
-        images = batch["image"].to(device)
-        masks = batch["mask"].to(device).unsqueeze(1).float()
+        images = batch["image"].cpu()
+        masks = batch["mask"].cpu().unsqueeze(1).float()
 
         logits = model(images)
         loss = criterion(logits, masks)
@@ -106,11 +106,14 @@ def evaluate(model, loader, criterion, device):
 
 def main():
     project_dir = Path(__file__).resolve().parent
+    checkpoints_dir = project_dir / "checkpoints"
     data_root = Path(os.environ.get("SUIM_ROOT", project_dir / "data"))
-    checkpoint_path = Path(
-        os.environ.get("SUIM_CHECKPOINT", project_dir / "checkpoints" / "best_unet_suim_binary.pth")
+    quantized_model_path = Path(
+        os.environ.get("SUIM_QUANTIZED_MODEL", checkpoints_dir / DEFAULT_QUANTIZED_MODEL_NAME)
     )
-    vis_dir = Path(os.environ.get("SUIM_VIS_DIR", project_dir / "test_visualizations_binary"))
+    vis_dir = Path(
+        os.environ.get("SUIM_QUANT_VIS_DIR", project_dir / "test_visualizations_quantized")
+    )
     max_vis = int(os.environ.get("SUIM_MAX_VIS", 6))
     batch_size = int(os.environ.get("SUIM_BATCH_SIZE", 8))
     img_width = int(os.environ.get("SUIM_IMG_WIDTH", 320))
@@ -119,12 +122,11 @@ def main():
     val_ratio = float(os.environ.get("SUIM_VAL_RATIO", 0.2))
     seed = int(os.environ.get("SUIM_SEED", 42))
     num_workers = 0 if os.name == "nt" else int(os.environ.get("SUIM_NUM_WORKERS", 1))
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if not data_root.exists():
         raise FileNotFoundError(f"SUIM dataset root not found: {data_root}")
-    if not checkpoint_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+    if not quantized_model_path.exists():
+        raise FileNotFoundError(f"Quantized model not found: {quantized_model_path}")
 
     _, _, test_loader = create_suim_dataloaders(
         root=data_root,
@@ -132,39 +134,30 @@ def main():
         val_ratio=val_ratio,
         seed=seed,
         num_workers=num_workers,
-        pin_memory=torch.cuda.is_available(),
+        pin_memory=False,
         test_transform=get_test_transform(img_size),
     )
 
-    model = UNet(n_channels=3, n_classes=1).to(device)
-<<<<<<< HEAD
-    model.load_state_dict(torch.load(checkpoint_path, map_location=device))
-=======
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    if "model_state_dict" in checkpoint:
-        model.load_state_dict(checkpoint["model_state_dict"])
-    else:
-        model.load_state_dict(checkpoint)
->>>>>>> 73a54fa878e54bba2183aa27d508cef8be39daaa
+    quantized_model = load_quantized_model(quantized_model_path)
     criterion = BCEDiceFocalLoss()
 
     print(f"Dataset root: {data_root}")
-    print(f"Checkpoint: {checkpoint_path}")
-    print(f"Device: {device}")
+    print(f"Quantized model: {quantized_model_path}")
+    print("Device: cpu")
     print(f"Task: Binary foreground/background segmentation")
     print(f"Classes: {SUIM_BINARY_CLASSES}")
     print(f"Test samples: {len(test_loader.dataset)}")
     print(f"Resize: {img_width}x{img_height}")
 
-    test_loss, test_acc, test_iou = evaluate(model, test_loader, criterion, device)
+    test_loss, test_acc, test_iou = evaluate(quantized_model, test_loader, criterion)
 
-    print("\nTest Results")
+    print("\nQuantized Test Results")
     print(f"Loss: {test_loss:.4f}")
     print(f"Pixel Accuracy: {test_acc:.4f}")
     print(f"IoU: {test_iou:.4f}")
 
-    save_visualizations(model, test_loader, device, vis_dir, max_images=max_vis)
-    print(f"Saved {max_vis} test visualizations to: {vis_dir}")
+    save_visualizations(quantized_model, test_loader, vis_dir, max_images=max_vis)
+    print(f"Saved {max_vis} quantized test visualizations to: {vis_dir}")
 
 
 if __name__ == "__main__":
