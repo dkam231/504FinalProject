@@ -1,60 +1,102 @@
-# 🌊 Implementing U-Net Pipelines for Robust Underwater Image Segmentation
+# Robust Underwater Segmentation with U-Net  
+### EECS 504 Final Project
 
-## Team Members
-* Divyam Kamboj
-* Shivam Udeshi
-* Jaemin Jeon
-* Zhe Jiang
+**Authors:** Divyam Kamboj, Shivam Udeshi, Jaemin Jeon, Zhe Jiang
 
-## Project Description
-FathomNet is an open-source, expert-annotated image database designed to train machine learning algorithms to understand ocean life and underwater environments. Its segmentation model provided by FathomNet utilizes a **ResNet backbone** with **Detectron2**. 
+## Overview
 
-While ResNet excels at image classification, it tends to lose concrete spatial details as data moves through deep layers, especially in high-noise, low-contrast underwater environments. 
+This repository contains our EECS 504 final project on **underwater image segmentation using U-Net-based pipelines**.  
+The project focuses on building a lightweight and reproducible segmentation workflow for underwater scenes, with an emphasis on:
 
-This project aims to replace the generic ResNet architecture with a custom **U-Net** pipeline. Unlike commaonly used model (baseline: ResNet-50 + DeepLabV3), U-Net’s symmetric encoder-decoder structure and skip connections allow it to recover fine spatial details and delicate boundaries of marine organisms far more effectively. By focusing on pixel-level Foreground/Background (FG/BG) segmentation, we aim to achieve higher precision (measured via mIoU) while simplifying the training pipeline.
+- preserving fine spatial structure in noisy underwater images,
+- improving foreground/background mask quality,
+- using a simpler segmentation pipeline than heavier detection-to-segmentation baselines,
+- supporting both **SUIM-based training** and **FathomNet transfer experiments**.
 
-## Key Features
-* **Adaptive Asynchronous Downloader:** A custom, highly optimized data ingestion script using `asyncio` and `httpx` with adaptive worker scaling and exponential backoff.
-* **Baseline Benchmarking:** Evaluation of the off-the-shelf FathomNet Detectron2 model on the out-of-sample dataset.
-* **Custom U-Net Architecture:** A specialized segmentation model optimized for underwater imagery.
+Our core motivation is that underwater imagery is difficult: contrast is low, boundaries are weak, and objects are often partially occluded or visually blended into the background. Instead of relying only on large, multi-stage pipelines, we explore whether a clean U-Net workflow can provide strong segmentation quality while remaining easier to train, debug, and extend.
 
-### 1. Requirements
-Ensure you have Python 3.8+ installed. You will need the following libraries:
-```bash
-pip install torch torchvision
-pip install httpx coco-lib tenacity tqdm
-```
+---
 
-The FathomNet dataset could be get by downloading `Download train.json` (281 MB) and `Download test.json` (22.2 MB) from `https://database.fathomnet.org/fathomnet/#` to `root/Fathomnet_Code/fathomnet_data_download` and running the cpmmand below:
-```bash
-cd ./Fathomnet_Code/fathomnet_data_download
-python ./download_all_fathomnet_data.py
-```
+## Project Goals
 
-The SUIM dataset could be get by downloading `SUIM.zip` from `https://irvlab.cs.umn.edu/resources/suim-dataset` to `root/SUIM` and running the cpmmand below:
-```bash
-cd ./SUIM
-unzip SUIM.zip -d data
-```
+This repo supports multiple stages of the project:
 
-### 2. U-Net
-```bash
-cd ./SUIM
-python train.py
-python test.py
-```
+1. **Multiclass semantic segmentation on SUIM**
+   - Train a U-Net on the SUIM underwater segmentation dataset.
+   - Evaluate with pixel accuracy and mean IoU.
 
-### 3. Baseline
-ResNet-101 + Detectron2 could be executed by running the command below:
-```bash
-cd ./SUIM/baseline_models/detectron
-python train.py
-python test.py
-```
+2. **Binary foreground/background segmentation**
+   - Collapse underwater segmentation into a simpler FG/BG task.
+   - Emphasize mask quality and boundary preservation.
 
-ResNet-50 + DeepLabV3 could be executed by running the command below:
-```bash
-cd ./SUIM/baseline_models/deeplab
-python train.py
-python test.py
-```
+3. **Transfer learning from SUIM to FathomNet**
+   - Pretrain on SUIM.
+   - Fine-tune on FathomNet binary masks for underwater organism segmentation.
+
+4. **Experimentation and analysis**
+   - Jupyter notebooks for supervised and unsupervised experiments.
+   - Preprocessing scripts for dataset construction and mask generation.
+   - Utilities for downloading, organizing, and validating underwater data.
+
+---
+
+## Why U-Net?
+
+The baseline ecosystem around underwater segmentation often uses more complex pipelines, including detection backbones followed by segmentation components. In contrast, **U-Net** is a strong fit for this task because:
+
+- it preserves spatial detail through skip connections,
+- it performs well on pixel-level prediction tasks,
+- it is relatively lightweight and interpretable,
+- it is easier to adapt to binary segmentation and transfer learning.
+
+For underwater scenes, this is especially useful because thin structures, curved object boundaries, and small foreground regions are easy to lose in deeper feature hierarchies.
+
+---
+
+## Repository Structure
+
+```text
+504FinalProject/
+├── SUIM/                         # Core SUIM segmentation code
+│   ├── baseline_models/
+│   ├── dataloader.py
+│   ├── model.py
+│   ├── model_quantized.py
+│   ├── quantize_model.py
+│   ├── check_dataset.py
+│   ├── test.py
+│   └── ...
+│
+├── SUIM_Dataset/                 # Standalone SUIM training entry point
+│   └── train.py
+│
+├── combined/                     # Final integrated SUIM → FathomNet FG/BG workflow
+│   ├── datasets/
+│   ├── inference/
+│   ├── models/
+│   ├── preprocessing/
+│   ├── training/
+│   ├── utils/
+│   ├── README.md
+│   └── DESIGN_DECISIONS.md
+│
+├── fathomnet_data_download/      # FathomNet data download helpers
+│   ├── download_all_fathomnet_data.py
+│   ├── submit_download.sh
+│   └── where_to_look_for_data.txt
+│
+├── unsup_sup_notebooks/          # Experimental notebooks
+│   ├── model.ipynb
+│   ├── unsupervised_train_500_from_model.ipynb
+│   └── fathomnet_data_visualization_starter.ipynb
+│
+├── build_fathomnet_seg_dataset.py
+├── download.py
+├── download_images.py
+├── download_fathomnet_segmentations.py
+├── preprocess.py
+├── preprocess_pixel_level.py
+├── process_test_data.py
+├── SETUP.md
+├── Run.md
+└── requirements.txt
