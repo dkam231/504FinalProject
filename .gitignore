@@ -3,6 +3,13 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+#Dataset folder
+SUIM/data/
+!SUIM/checkpoints
+SUIM/mismatch_audit
+SUIM/non_palette_audit
+SUIM/checkpoints/best_unet_suim_binary.pth
+SUIM/checkpoints/last_unet_suim_binary.pth
 # C extensions
 *.so
 
