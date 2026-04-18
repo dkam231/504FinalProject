@@ -1,4 +1,4 @@
-# Run
+# RUN
 
 ## Train U-Net on SUIM
 
