@@ -1,12 +1,15 @@
 # Run
 
-## Train the multiclass U-Net on SUIM
+## Train U-Net on SUIM
 
 From the project root:
 
 ```bash
-cd SUIM_Dataset
+# From the project root
+cd ./SUIM
 python train.py
+# After train completed
+python test.py
 ```
 
 The training script:
@@ -17,7 +20,7 @@ The training script:
 - evaluates pixel accuracy and mean IoU
 - saves the best checkpoint to `SUIM_Dataset/checkpoints/best_unet_suim.pth`
 
-## Optional: use a custom dataset path
+### Optional: use a custom dataset path
 
 If your dataset is stored somewhere else, set `SUIM_ROOT`.
 
@@ -35,13 +38,24 @@ export SUIM_ROOT="/path/to/SUIM"
 python train.py
 ```
 
-## Recommended first run
+## Train Baseline Models on SUIM
+ResNet-101 + Detectron2 could be executed by running the command below:
+```bash
+# From the project root
+cd ./SUIM/baseline_models/detectron
+python train.py
+# After train completed
+python test.py
+```
 
-Before a full training run:
-
-1. Run `python check_dataset.py`
-2. Confirm the sample counts and class labels look correct
-3. Then launch `python train.py`
+ResNet-50 + DeepLabV3 could be executed by running the command below:
+```bash
+# From the project root
+cd ./SUIM/baseline_models/deeplab
+python train.py
+# After train completed
+python test.py
+```
 
 ## Common issues
 
@@ -50,10 +64,10 @@ Before a full training run:
 Make sure this exists:
 
 ```text
-SUIM_Dataset/SUIM/train_val/images
-SUIM_Dataset/SUIM/train_val/masks
-SUIM_Dataset/SUIM/TEST/images
-SUIM_Dataset/SUIM/TEST/masks
+SUIM/data/train_val/images
+SUIM/data/train_val/masks
+SUIM/data/TEST/images
+SUIM/data/TEST/masks
 ```
 
 ### Unknown RGB values in masks

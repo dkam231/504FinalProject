@@ -100,3 +100,7 @@ For underwater scenes, this is especially useful because thin structures, curved
 ├── SETUP.md
 ├── Run.md
 └── requirements.txt
+```
+
+## Setup and Run
+Please refer to `SETUP.md` and `RUN.md` respectively.

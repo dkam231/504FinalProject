@@ -7,6 +7,7 @@ This project can be developed on Windows, WSL, or Linux. For the current SUIM U-
 ### Windows PowerShell
 
 ```powershell
+git clone https://github.com/dkam231/504FinalProject.git
 cd 504FinalProject
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -15,6 +16,7 @@ python -m venv .venv
 ### macOS / Linux / WSL
 
 ```bash
+git clone https://github.com/dkam231/504FinalProject.git
 cd 504FinalProject
 python3 -m venv .venv
 source .venv/bin/activate
@@ -52,12 +54,20 @@ pip install -r requirements.txt
 
 ## 5. Prepare the SUIM dataset
 
-Create this folder structure inside `SUIM_Dataset`:
+
+The SUIM dataset could be get by downloading `SUIM.zip` from `https://irvlab.cs.umn.edu/resources/suim-dataset` to `root/SUIM` and running the cpmmand below:
+```bash
+# From the project root
+cd ./SUIM
+unzip SUIM.zip -d data
+```
+
+Make sure the following data structure exists before running the code:
 
 ```text
 504FinalProject/
-  SUIM_Dataset/
-    SUIM/
+  SUIM/
+    data/
       train_val/
         images/
         masks/
@@ -75,7 +85,8 @@ Important notes:
 ## 6. Sanity-check the data pipeline
 
 ```bash
-cd SUIM_Dataset
+# From the project root
+cd ./SUIM
 python check_dataset.py
 ```
 
